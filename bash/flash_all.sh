@@ -176,27 +176,13 @@ done
 echo "###################"
 echo "# FLASHING VBMETA #"
 echo "###################"
-read -rp "Disable android verified boot?, If unsure, say N. Bootloader won't be lockable if you select Y. (Y/N) " VBMETA_RESP
-case "$VBMETA_RESP" in
-    [yY] )
-        if [ "$SLOT_RESP" = "y" ] || [ "$SLOT_RESP" = "Y" ]; then
-            for s in a b; do
-                FlashImage "vbmeta_${s} --disable-verity --disable-verification" \ "vbmeta.img"
-            done
-        else
-            FlashImage "vbmeta_a --disable-verity --disable-verification" \ "vbmeta.img"
-        fi
-        ;;
-    *)
-        if [ "$SLOT_RESP" = "y" ] || [ "$SLOT_RESP" = "Y" ]; then
-            for s in a b; do
-                FlashImage "vbmeta_${s}" \ "vbmeta.img"
-            done
-        else
-            FlashImage "vbmeta_a" \ "vbmeta.img"
-        fi
-        ;;
-esac
+if [ "$SLOT_RESP" = "y" ] || [ "$SLOT_RESP" = "Y" ]; then
+    for s in a b; do
+        FlashImage "vbmeta_${s}" \ "vbmeta.img"
+    done
+else
+    FlashImage "vbmeta_a" \ "vbmeta.img"
+fi
 
 echo "#####################"
 echo "# FLASHING FIRMWARE #"
@@ -235,14 +221,7 @@ echo "####################################"
 echo "# FLASHING OTHER VBMETA PARTITIONS #"
 echo "####################################"
 for i in $vbmeta_partitions; do
-    case "$VBMETA_RESP" in
-        [yY] )
-            FlashImage "${i}_a --disable-verity --disable-verification" \ "$i.img"
-            ;;
-        *)
-            FlashImage "${i}_a" \ "$i.img"
-            ;;
-    esac
+    FlashImage "${i}_a" \ "$i.img"
 done
 
 echo "#############"
@@ -259,4 +238,3 @@ echo "########"
 echo "# DONE #"
 echo "########"
 echo "Stock firmware restored."
-echo "You may now optionally re-lock the bootloader if you haven't disabled android verified boot."

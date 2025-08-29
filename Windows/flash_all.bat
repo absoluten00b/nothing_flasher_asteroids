@@ -139,25 +139,12 @@ if %slot% equ all (
 echo ###################
 echo # FLASHING VBMETA #
 echo ###################
-set disable_avb=0
-choice /m "Disable android verified boot?, If unsure, say N. Bootloader won't be lockable if you select Y."
-if %errorlevel% equ 1 (
-    set disable_avb=1
-    if %slot% equ all (
-        for %%s in (a b) do (
-            call :FlashImage "vbmeta_%%s --disable-verity --disable-verification", vbmeta.img
-        )
-    ) else (
-        call :FlashImage "vbmeta_a --disable-verity --disable-verification", vbmeta.img
+if %slot% equ all (
+    for %%s in (a b) do (
+        call :FlashImage vbmeta_%%s, vbmeta.img
     )
 ) else (
-    if %slot% equ all (
-        for %%s in (a b) do (
-            call :FlashImage "vbmeta_%%s", vbmeta.img
-        )
-    ) else (
-        call :FlashImage "vbmeta_a", vbmeta.img
-    )
+    call :FlashImage vbmeta_a, vbmeta.img
 )
 
 echo #####################
@@ -196,11 +183,7 @@ echo ####################################
 echo # FLASHING OTHER VBMETA PARTITIONS #
 echo ####################################
 for %%i in (%vbmeta_partitions%) do (
-    if %disable_avb% equ 1 (
-        call :FlashImage "%%i --disable-verity --disable-verification", %%i.img
-    ) else (
-        call :FlashImage %%i, %%i.img
-    )
+    call :FlashImage %%i, %%i.img
 )
 
 echo #############
@@ -215,7 +198,6 @@ echo ########
 echo # DONE #
 echo ########
 echo Stock firmware restored.
-echo You may now optionally re-lock the bootloader if you haven't disabled android verified boot.
 
 pause
 exit
