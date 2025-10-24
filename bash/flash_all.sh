@@ -29,10 +29,11 @@ fi
 
 # Partition Variables
 boot_partitions="boot init_boot vendor_boot dtbo recovery"
+vbmeta_partitions="vbmeta vbmeta_system vbmeta_vendor"
 firmware_partitions="abl aop aop_config bluetooth cpucp cpucp_dtb devcfg dsp featenabler hyp imagefv keymaster modem multiimgoem pvmfw qupfw shrm tz uefi uefisecapp xbl xbl_config xbl_ramdump"
-logical_partitions="system system_ext product vendor system_dlkm vendor_dlkm odm"
+logical_partitions="system system_ext product vendor odm"
+dlkm_partitions="system_dlkm vendor_dlkm"
 junk_logical_partitions="null"
-vbmeta_partitions="vbmeta_system vbmeta_vendor"
 
 function SetActiveSlot {
     if ! "$fastboot" set_active a; then
@@ -176,18 +177,21 @@ done
 echo "###################"
 echo "# FLASHING VBMETA #"
 echo "###################"
-if [ "$SLOT_RESP" = "y" ] || [ "$SLOT_RESP" = "Y" ]; then
-    for s in a b; do
-        FlashImage "vbmeta_${s}" \ "vbmeta.img"
-    done
-else
-    FlashImage "vbmeta_a" \ "vbmeta.img"
-fi
+for i in $vbmeta_partitions; do
+    FlashImage "${i}_a" \ "$i.img"
+done
+
+echo "################"
+echo "# FLASHING DLKM  #"
+echo "################"
+RebootFastbootD
+for i in $dlkm_partitions; do
+    FlashImage "${i}_a" \ "$i.img"
+done
 
 echo "#####################"
 echo "# FLASHING FIRMWARE #"
 echo "#####################"
-RebootFastbootD
 for i in $firmware_partitions; do
     case "$SLOT_RESP" in
         [yY] )
@@ -217,12 +221,6 @@ else
     FlashSuper
 fi
 
-echo "####################################"
-echo "# FLASHING OTHER VBMETA PARTITIONS #"
-echo "####################################"
-for i in $vbmeta_partitions; do
-    FlashImage "${i}_a" \ "$i.img"
-done
 
 echo "#############"
 echo "# REBOOTING #"

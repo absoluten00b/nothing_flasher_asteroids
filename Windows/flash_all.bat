@@ -19,9 +19,10 @@ echo ##################################
 :: Set partition variables
 set boot_partitions=boot init_boot vendor_boot dtbo recovery
 set firmware_partitions=abl aop aop_config bluetooth cpucp cpucp_dtb devcfg dsp featenabler hyp imagefv keymaster modem multiimgoem pvmfw qupfw shrm tz uefi uefisecapp xbl xbl_config xbl_ramdump
-set logical_partitions=system system_ext product vendor system_dlkm vendor_dlkm odm
+set logical_partitions=system system_ext product vendor odm
+set dlkm_partitions=system_dlkm vendor_dlkm
 set junk_logical_partitions=null
-set vbmeta_partitions=vbmeta_system vbmeta_vendor
+set vbmeta_partitions=vbmeta vbmeta_system vbmeta_vendor
 
 :: Set working directory
 set "WORK_DIR=%~dp0"
@@ -139,24 +140,27 @@ if %slot% equ all (
 echo ###################
 echo # FLASHING VBMETA #
 echo ###################
-if %slot% equ all (
-    for %%s in (a b) do (
-        call :FlashImage vbmeta_%%s, vbmeta.img
-    )
-) else (
-    call :FlashImage vbmeta_a, vbmeta.img
+for %%i in (%vbmeta_partitions%) do (
+    call :FlashImage %%i_a, %%i.img
+)
+
+echo #################
+echo # FLASHING DLKM #
+echo #################
+call :RebootFastbootD
+for %%i in (%dlkm_partitions%) do (
+    call :FlashImage %%i_a, %%i.img
 )
 
 echo #####################
 echo # FLASHING FIRMWARE #
 echo #####################
-call :RebootFastbootD
 if %slot% equ all (
     for %%i in (%firmware_partitions%) do (
         for %%s in (a b) do (
             call :FlashImage %%i_%%s, %%i.img
         )
-    ) 
+    )
 ) else (
     for %%i in (%firmware_partitions%) do (
         call :FlashImage %%i_%slot%, %%i.img
@@ -173,17 +177,10 @@ if not exist super.img (
         call :ResizeLogicalPartition
     )
     for %%i in (%logical_partitions%) do (
-        call :FlashImage %%i, %%i.img
+        call :FlashImage %%i_a, %%i.img
     )
 ) else (
     call :FlashSuper
-)
-
-echo ####################################
-echo # FLASHING OTHER VBMETA PARTITIONS #
-echo ####################################
-for %%i in (%vbmeta_partitions%) do (
-    call :FlashImage %%i, %%i.img
 )
 
 echo #############
