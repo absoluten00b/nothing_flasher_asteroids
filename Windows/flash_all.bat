@@ -2,7 +2,7 @@
 :: SPDX-License-Identifier: MIT
 
 @echo off
-title Nothing Phone 3a Series Fastboot ROM Flasher
+title Nothing Phone 3a Series Fastboot ROM Flasher (fastbootd Fix)
 
 :: Ensure the script runs as administrator
 net session >nul 2>&1
@@ -18,6 +18,8 @@ echo ##################################
 
 :: Set partition variables
 set boot_partitions=boot init_boot vendor_boot dtbo recovery
+:: :: MODIFICATION (v3) :: Added init_boot to custom partitions
+set custom_boot_partitions=boot init_boot dtbo vendor_boot recovery
 set firmware_partitions=abl aop aop_config bluetooth cpucp cpucp_dtb devcfg dsp featenabler hyp imagefv keymaster modem multiimgoem pvmfw qupfw shrm tz uefi uefisecapp xbl xbl_config xbl_ramdump
 set logical_partitions=system system_ext product vendor odm
 set dlkm_partitions=system_dlkm vendor_dlkm
@@ -116,26 +118,51 @@ if %errorlevel% equ 1 (
     echo Data wipe canceled.
 )
 
-echo ############################
-echo # FLASHING BOOT PARTITIONS #
-echo ############################
+:: :: MODIFICATION :: Moved "both slots" check here, BEFORE any flashing
+echo ##########################
+echo # CHECKING SLOT-ALL MODE #
+echo ##########################
 set slot=a
 choice /m "Flash images on both slots? If unsure, say N."
 if %errorlevel% equ 1 (
     set slot=all
 )
 
+:: :: MODIFICATION :: Added "STEP 1" to flash custom images first
+echo #######################################################
+echo # STEP 1: FLASHING CUSTOM IMAGES (TO ENABLE FASTBOOTD) #
+echo #######################################################
+
+if not exist "custom" (
+    echo [ERROR] 'custom' folder not found!
+    echo This fix requires a 'custom' folder containing:
+    echo   - boot.img
+    :: :: MODIFICATION (v3) :: Added init_boot to the check message
+    echo   - init_boot.img
+    echo   - dtbo.img
+    echo   - vendor_boot.img
+    echo   - recovery.img
+    echo Please create this folder, add the custom files, and re-run.
+    pause
+    exit /b 1
+)
+
+echo [INFO] Flashing custom images from 'custom' folder...
+
 if %slot% equ all (
-    for %%i in (%boot_partitions%) do (
+    for %%i in (%custom_boot_partitions%) do (
         for %%s in (a b) do (
-            call :FlashImage %%i_%%s, %%i.img
+            call :FlashImage %%i_%%s, custom\%%i.img
         )
     ) 
 ) else (
-    for %%i in (%boot_partitions%) do (
-        call :FlashImage %%i_%slot%, %%i.img
+    for %%i in (%custom_boot_partitions%) do (
+        call :FlashImage %%i_%slot%, custom\%%i.img
     )
 )
+echo [SUCCESS] Custom images flashed.
+
+:: :: MODIFICATION :: Original "FLASHING BOOT PARTITIONS" block was removed from here.
 
 echo ###################
 echo # FLASHING VBMETA #
@@ -182,6 +209,24 @@ if not exist super.img (
 ) else (
     call :FlashSuper
 )
+
+:: :: MODIFICATION :: Added "STEP 2" to re-flash STOCK boot images at the end
+echo ############################################
+echo # STEP 2: RE-FLASHING STOCK BOOT PARTITIONS #
+echo ############################################
+
+if %slot% equ all (
+    for %%i in (%boot_partitions%) do (
+        for %%s in (a b) do (
+            call :FlashImage %%i_%%s, %%i.img
+        )
+    ) 
+) else (
+    for %%i in (%boot_partitions%) do (
+        call :FlashImage %%i_%slot%, %%i.img
+    )
+)
+echo [SUCCESS] Stock boot images restored.
 
 echo #############
 echo # REBOOTING #
@@ -240,6 +285,7 @@ if errorlevel 1 (
         pause >nul
         goto :CheckForSha
     )
+    
     if errorlevel 1 (
         echo Proceeding without hash verification...
         endlocal
@@ -282,6 +328,7 @@ for %%F in (*.sha256) do (
                 for /f "tokens=1" %%X in ('CertUtil -hashfile "!file!" SHA256 ^| find /i /v "SHA256" ^| find /i /v "CertUtil"') do (
                     set "actual=%%X"
                 )
+             
                 set "actual=!actual: =!"
                 set "actual=!actual:~0,64!"
 
@@ -349,12 +396,12 @@ exit /b 0
 :ConfirmProceed
 choice /m "Some files are invalid or missing. Do you want to proceed anyway?"
 if %errorlevel% equ 1 (
-    rem User chose Yes → continue
+    rem User chose Yes -> continue
     endlocal
     exit /b 0
 )
 
-rem User chose No → show retry/exit menu
+rem User chose No -> show retry/exit menu
 echo.
 echo ====================================================
 echo [INFO] Choose an option:
@@ -381,6 +428,7 @@ echo #############################
 if not exist platform-tools_r33.0.0-windows (
     echo Platform tools not found. Downloading...
     curl --ssl-no-revoke -L https://dl.google.com/android/repository/platform-tools_r33.0.0-windows.zip -o platform-tools_r33.0.0-windows.zip
+ 
     if exist platform-tools_r33.0.0-windows.zip (
         echo Platform tools downloaded successfully.
         call :UnZipFile "%~dp0platform-tools_r33.0.0-windows.zip" "%~dp0platform-tools_r33.0.0-windows"
@@ -453,11 +501,6 @@ setlocal
 set "RETRY_COUNT=1"
 set "MAX_RETRIES=3"
 
-:CheckFastbootDevices
-setlocal
-set "RETRY_COUNT=1"
-set "MAX_RETRIES=3"
-
 :CheckFastbootLoop
 set "DEVICE_ID="
 
@@ -471,14 +514,15 @@ if defined DEVICE_ID (
     endlocal
     exit /b 0
 ) else (
-    echo [ERROR] No fastboot device detected! Attempt %RETRY_COUNT% of %MAX_RETRIES%
+    echo [ERROR] No fastboot device detected!
+    Attempt %RETRY_COUNT% of %MAX_RETRIES%
     echo - Ensure your device is in fastboot mode.
     echo - Check USB connection / try a different cable or port.
     echo - Install or update proper fastboot drivers.
     echo.
 
     if %RETRY_COUNT% lss %MAX_RETRIES% (
-        set /a RETRY_COUNT+=1
+        set /a RETTRY_COUNT+=1
         pause
         goto :CheckFastbootLoop
     ) else (
@@ -509,6 +553,7 @@ if %errorlevel% neq 0 (
 exit /b
 
 :FlashImage
+echo [INFO] Flashing %~1 <- %~2
 %fastboot% flash %~1 %~2
 if %errorlevel% neq 0 (
     call :Choice "Flashing %~2 failed"
